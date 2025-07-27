@@ -371,69 +371,60 @@ class AIRestructuringTool(Tool):
             return {"success": False, "error": str(e)}
 
     def _restructure_with_ai(self, note_content: str, processed_template: str, examples: List[Dict], analysis: Dict) -> str:
-        """Use OpenAI to restructure the note"""
+        """Use OpenAI to restructure the note using the latest responses API"""
         # Prepare examples text
         examples_text = ""
         for i, example in enumerate(examples[:2], 1):
             examples_text += f"\n--- Example {i}: {example['filename']} ---\n{example['content'][:2000]}...\n"
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """
-                        You are an expert knowledge management specialist and Obsidian notes restructuring expert.
-                        Your primary goal is to transform existing notes into well-structured, template-compliant documents 
-                        while preserving ALL original content and enhancing its organization and discoverability.
+        # Prepare messages as per new API
+        messages = [
+            {
+                "role": "developer",
+                "content": (
+                    "You are an expert knowledge management specialist and Obsidian notes restructuring expert.\n"
+                    "Your primary goal is to transform existing notes into well-structured, template-compliant documents "
+                    "while preserving ALL original content and enhancing its organization and discoverability.\n\n"
+                    "## Core Principles:\n"
+                    "1. Content Preservation: Never delete or lose any original content - reorganize and enhance it\n"
+                    "2. Template Compliance: Follow the provided template structure exactly\n"
+                    "3. Intelligent Enhancement: Add relevant metadata, tags, and cross-references based on content analysis\n"
+                    "4. Quality Improvement: Improve readability, structure, and knowledge connections\n\n"
+                    "CRITICAL: The template dates have been pre-filled with actual file dates. Use these exactly.\n"
+                    "Return ONLY the restructured markdown content without any explanations or wrapper text."
+                )
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"## Task: Restructure Obsidian Note\n\n"
+                    f"Transform the following note to match the template structure while preserving all content.\n\n"
+                    f"### Current Note to Restructure:\n"
+                    f"```markdown\n{note_content}\n```\n\n"
+                    f"### Template Structure (with pre-filled dates):\n"
+                    f"```markdown\n{processed_template}\n```\n\n"
+                    f"### Reference Examples:\n{examples_text}\n\n"
+                    f"### Analysis Report:\n"
+                    f"- Missing sections: {analysis['missing_sections']}\n"
+                    f"- Current compliance score: {analysis['compliance_score']:.2f}\n"
+                    f"- Current sections found: {analysis['current_sections']}\n"
+                    f"- Template sections required: {analysis['template_sections']}\n\n"
+                    f"Output the complete restructured note in markdown format only. No explanations or wrapper text."
+                )
+            }
+        ]
 
-                        ## Core Principles:
-                        1. **Content Preservation**: Never delete or lose any original content - reorganize and enhance it
-                        2. **Template Compliance**: Follow the provided template structure exactly
-                        3. **Intelligent Enhancement**: Add relevant metadata, tags, and cross-references based on content analysis
-                        4. **Quality Improvement**: Improve readability, structure, and knowledge connections
-
-                        CRITICAL: The template dates have been pre-filled with actual file dates. Use these exactly.
-                        Return ONLY the restructured markdown content without any explanations or wrapper text.
-                    """
-                },
-                {
-                    "role": "user",
-                    "content": f"""
-                        ## Task: Restructure Obsidian Note
-                        
-                        Transform the following note to match the template structure while preserving all content.
-                        
-                        ### Current Note to Restructure:
-                        ```markdown
-                        {note_content}
-                        ```
-                        
-                        ### Template Structure (with pre-filled dates):
-                        ```markdown
-                        {processed_template}
-                        ```
-                        
-                        ### Reference Examples:
-                        {examples_text}
-                        
-                        ### Analysis Report:
-                        - **Missing sections**: {analysis['missing_sections']}
-                        - **Current compliance score**: {analysis['compliance_score']:.2f}
-                        - **Current sections found**: {analysis['current_sections']}
-                        - **Template sections required**: {analysis['template_sections']}
-                        
-                        **Output the complete restructured note in markdown format only. No explanations or wrapper text.**
-                    """
-                }
-            ]
+        # Use the latest OpenAI responses API
+        response = client.responses.create(
+            model="gpt-4.1",
+            input=messages
         )
 
-        generated_text = response.choices[0].message.content.strip()
-        
+        generated_text = response.output_text.strip()
+
         # Strip markdown code block markers if present
-        if generated_text.strip().startswith("```markdown"):
-            lines = generated_text.strip().splitlines()
+        if generated_text.startswith("```markdown"):
+            lines = generated_text.splitlines()
             if len(lines) > 2 and lines[-1].strip() == "```":
                 generated_text = "\n".join(lines[1:-1])
 
